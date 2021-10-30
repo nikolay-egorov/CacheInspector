@@ -34,11 +34,19 @@ void runLoop(int times) {
 
 }
 
+long estimatedCacheSize = 1;
+
+
 // The time() subroutine returns the timing measurement for a million reads
 // for a specified higher stride H and number of spots S
 long Time() {
     auto end = (S - 1) * H;
-    //std::cout << "cyclic refs of kb: " << (end - H)/1024  << '\n';
+    auto currSizeKB = (end - H)/1024;
+    // and if currSizeKB <= CACHE_BOUND
+    if (estimatedCacheSize < currSizeKB) {
+        estimatedCacheSize = currSizeKB;
+    }
+    std::cout << cur_time << ' ' << "cyclic refs of kb: " << currSizeKB  << '\n';
     // Create the cyclic chain of references
     for (auto i = H; i <= end; i += H) {
         data[i] = (int*)&data[i - H];
@@ -90,6 +98,59 @@ bool sortFirst(const std::tuple<int, int>& lhs,const std::tuple<int, int>& rhs) 
     return (std::get<1>(lhs) < std::get<1>(rhs));
 }
 
+
+long traverseCache(long size, int cacheLineSize) {
+    char* buf = new char[size];
+
+    auto startTime = std::chrono::high_resolution_clock::now();
+    //auto startTime = clock();
+
+    // replace with cache-line size
+    for (size_t i = 0; i < 64 * MB; i++){
+        ++buf[(i * cacheLineSize) % size]; // writing this way means we write to a new cache-line every time (I hope so)
+    }
+
+    //auto endTime = clock();
+    auto endTime = std::chrono::high_resolution_clock::now();
+
+    delete [] buf;
+    return (endTime - startTime).count();
+}
+
+std::vector<long> determineCacheSizes() {
+    // of size
+    std::vector<long> ans;
+    // of time
+    std::vector<long> tmp;
+
+    long minTime = 1;
+    long maxDiff = 1;
+    long lastSpotted = 1024;
+
+    for (long size = 1024; size <= 9 * MB; size += 256*1024 - 1) {
+        auto currTime = traverseCache(size, 64);
+        auto currDiff = abs(currTime - minTime);
+
+/*        // means we are enough away from last
+        if (size * 256 > lastSpotted) {
+            maxDiff = 1;
+        }*/
+
+        if (size == 1024) {
+            minTime = currTime;
+        } else if (currTime < minTime && currDiff > maxDiff) {
+            tmp.push_back(size / 1024);
+            //lastSpotted = size;
+            minTime = currTime;
+            maxDiff = currDiff;
+        }
+        std::cout << size / 1024 << ' ' << currTime << ' ' <<  currDiff <<'\n';
+    }
+
+    return tmp;
+}
+
+
 /**
  * Написать программу, которая вычисляет и печатает характеристики кэша данных компьютера
 ● Число уровней
@@ -115,8 +176,12 @@ int main() {
             if (DeltaDiff()) {
                 jmpC++;
                 // need to do something with S
-                std::cout<< "time: " << cur_time <<" jump at " << H << ' ' << S << '\n';
-                //std::cout<< "time: " << cur_time <<" jump at " << H << ' ' << S << ' ' << S /jmpC  << '\n';
+                //std::cout<< "time: " << cur_time <<" jump at " << H << ' ' << S << '\n';
+
+                //if (estimatedCacheSize <= Z) {
+                //    std::cout<< "time: " << cur_time <<" jump at " << H << ' ' << S << '\n';
+                //}
+
                 RecordJump();
                 seenJumpsAt.insert(H);
                 if (record.count(H)) {
@@ -171,4 +236,11 @@ int main() {
     // TODO: perhaps, multiple runs needed to stabilise results
     std::cout << "Cache-line size: " << cacheLineS << std::endl;
 
+
+    auto caches = determineCacheSizes();
+
+    std::cout << caches.size() << '\n';
+    for (const auto &item : caches) {
+        std::cout << item << ' ';
+    }
 }
