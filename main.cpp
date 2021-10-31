@@ -19,15 +19,6 @@ const int REPS = 512 * MB;
 const int length = MB/sizeof(int) - 1;
 
 void runLoop(int times) {
-//    int tmp = 0;
-//    int **x = (int **) &data[0];
-//    for (size_t j = 0; j < times; j++) {
-//        for (size_t k = 0; k < REPS; k++) {
-//            // read the data in strides (`i`)
-//            tmp += *x[(k)& 100000000];
-//            std:: cout << tmp << ' ';
-//        }
-//    }
     int **x = (int **) &data[0];
     for (int i = 0; i < times; i++) {
         x = (int **) *(x);
@@ -178,8 +169,6 @@ std::vector<long> determineCacheSizes() {
                 continue;
             }
             if (!probes.empty()) {
-                //auto prevDiff = probes.back().first;
-                //auto relDiff = currDiff / prevDiff;
                 if (currDiff > maxDiff) {
                     maxDiff = currDiff;
                     cacheS = size / 1024;
@@ -195,38 +184,6 @@ std::vector<long> determineCacheSizes() {
         maxDiff = 1;
     }
 
-
-//    for (long size = startSize; size <= 9 * MB; size += step) {
-//        auto currTime = traverseCache(size, 64);
-//        auto currDiff = std::abs(currTime - prevTime);
-//        if (size == startSize) {
-//            prevTime = currTime;
-//            continue;
-//        }
-//
-//        prevTime = currTime;
-//
-//
-//
-//
-///*        if (size == 512 * 1024) {
-//            minTime = currTime;
-//            currDiff = 1;
-//        } else if (currTime < minTime) {
-//            if (tmp.size()) {
-//                int back = tmp[tmp.size() - 1];
-//                //std::cout << "Diff is: " << size/1024 - back << '\n';
-//                if (size/1024 - back <= 512) {
-//                    std::cout << size / 1024 << ' ' << currTime << ' ' <<  currDiff <<'\n';
-//                    continue;
-//                }
-//            }
-//            tmp.push_back(size / 1024);
-//            //lastSpotted = size;
-//            minTime = currTime;
-//        }*/
-//        std::cout << size / 1024 << ' ' << currTime << ' ' <<  currDiff <<'\n';
-//    }
 
     return tmp;
 }
