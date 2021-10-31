@@ -4,6 +4,7 @@
 #include <iostream>
 #include <map>
 #include <algorithm>
+#include <cmath>
 
 long H = 16;// start Stride size
 // S - start associativity
@@ -107,12 +108,11 @@ long traverseCache(long size, int cacheLineSize) {
 
     // replace with cache-line size
     for (size_t i = 0; i < 64 * MB; i++){
-        ++buf[(i * cacheLineSize) % size]; // writing this way means we write to a new cache-line every time (I hope so)
+        ++buf[(i * cacheLineSize) % size]; // means we write to a new cache-line (I hope so)
     }
 
     //auto endTime = clock();
     auto endTime = std::chrono::high_resolution_clock::now();
-
     delete [] buf;
 
     return (endTime - startTime).count();
@@ -160,34 +160,73 @@ std::vector<long> determineCacheSizes() {
     long prevTime = 1;
 
     determineL1Size(tmp);
-    return tmp;
+    //return tmp;
+    long startSize = 512 * 1024;
+    // L2 and L3; 4096 for L2
+    std::vector<long> cacheBound{static_cast<long>(pow(2, 12)), 9200};
+    std::vector<std::pair<long, long>> probes;
+    long cacheS = 1;
 
-
-    for (long size = 1024; size <= 10 * MB; size += step - 1) {
-        auto currTime = traverseCache(size, 64);
-        auto currDiff = abs(currTime - minTime);
-        if (size >= 256 * 1024) {
-            step = 256 * 1024;
-        }
-
-        if (size == 1024) {
-            minTime = currTime;
-            currDiff = 1;
-        } else if (currTime < minTime) {
-            if (tmp.size()) {
-                int back = tmp[tmp.size() - 1];
-                //std::cout << "Diff is: " << size/1024 - back << '\n';
-                if (size/1024 - back <= 512) {
-                    std::cout << size / 1024 << ' ' << currTime << ' ' <<  currDiff <<'\n';
-                    continue;
+    for (const auto &item : cacheBound) {
+        std::cout << "Seek from " <<startSize/1024 << " to " << item * 1024 << '\n';
+        probes.clear();
+        for (long size = startSize; size <= item * 1024 - 1; size += step) {
+            auto currTime = traverseCache(size, 64);
+            auto currDiff = std::abs(currTime - prevTime);
+            if (size == startSize) {
+                prevTime = currTime;
+                continue;
+            }
+            if (!probes.empty()) {
+                //auto prevDiff = probes.back().first;
+                //auto relDiff = currDiff / prevDiff;
+                if (currDiff > maxDiff) {
+                    maxDiff = currDiff;
+                    cacheS = size / 1024;
                 }
             }
-            tmp.push_back(size / 1024);
-            //lastSpotted = size;
-            minTime = currTime;
+            probes.emplace_back(currDiff, size/1024);
+            prevTime = currTime;
+            std::cout << size / 1024 << ' ' << currTime << ' ' <<  currDiff <<'\n';
         }
-        std::cout << size / 1024 << ' ' << currTime << ' ' <<  currDiff <<'\n';
+        startSize = item * 1024;
+        std::cout << "Potential cache is " << cacheS << '\n';
+        tmp.push_back(cacheS);
+        maxDiff = 1;
     }
+
+
+//    for (long size = startSize; size <= 9 * MB; size += step) {
+//        auto currTime = traverseCache(size, 64);
+//        auto currDiff = std::abs(currTime - prevTime);
+//        if (size == startSize) {
+//            prevTime = currTime;
+//            continue;
+//        }
+//
+//        prevTime = currTime;
+//
+//
+//
+//
+///*        if (size == 512 * 1024) {
+//            minTime = currTime;
+//            currDiff = 1;
+//        } else if (currTime < minTime) {
+//            if (tmp.size()) {
+//                int back = tmp[tmp.size() - 1];
+//                //std::cout << "Diff is: " << size/1024 - back << '\n';
+//                if (size/1024 - back <= 512) {
+//                    std::cout << size / 1024 << ' ' << currTime << ' ' <<  currDiff <<'\n';
+//                    continue;
+//                }
+//            }
+//            tmp.push_back(size / 1024);
+//            //lastSpotted = size;
+//            minTime = currTime;
+//        }*/
+//        std::cout << size / 1024 << ' ' << currTime << ' ' <<  currDiff <<'\n';
+//    }
 
     return tmp;
 }
@@ -202,7 +241,7 @@ std::vector<long> determineCacheSizes() {
     ● Ассоцитивность
  * */
 int main() {
-    std::cout <<( H * N < Z) << " Start\n";
+    std::cout << "Start\n";
 
     std::vector<long> jumpsTime;
     std::set<long> seenJumpsAt;
@@ -219,10 +258,6 @@ int main() {
                 jmpC++;
                 // need to do something with S
                 //std::cout<< "time: " << cur_time <<" jump at " << H << ' ' << S << '\n';
-
-                //if (estimatedCacheSize <= Z) {
-                //    std::cout<< "time: " << cur_time <<" jump at " << H << ' ' << S << '\n';
-                //}
 
                 RecordJump();
                 seenJumpsAt.insert(H);
@@ -255,7 +290,7 @@ int main() {
     long cacheLineS = 1;
     double maxDiff = 1.2;
     for (const auto &item : record) {
-        auto innerV = item.second;
+        auto& innerV = item.second;
         //std:: cout << item.first << ' ';
 
         for (const auto &vElem : innerV) {
@@ -270,7 +305,6 @@ int main() {
         }
 
 
-
         //std::sort(innerV.begin(), innerV.end(), sortFirst);
         //std::cout << std::get<0>(innerV[0])  << ' ' << std::get<1>(innerV[0]) << '\n';
     }
@@ -281,7 +315,7 @@ int main() {
 
     auto caches = determineCacheSizes();
 
-    std::cout << caches.size() << '\n';
+    std::cout << "Levels: " << caches.size() << '\n';
     for (const auto &item : caches) {
         std::cout << item << ' ';
     }
