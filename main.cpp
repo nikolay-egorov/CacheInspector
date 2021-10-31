@@ -114,7 +114,37 @@ long traverseCache(long size, int cacheLineSize) {
     auto endTime = std::chrono::high_resolution_clock::now();
 
     delete [] buf;
+
     return (endTime - startTime).count();
+    //return (endTime - startTime);
+}
+
+// looks ok
+void determineL1Size(std::vector<long>& ans) {
+    long maxDiff = 0;
+    long prevTime = 1;
+    std::vector<std::pair<long, long>> l1Probes;
+    long maxDiffSize = 1024;
+    // run separate loop for L1
+    for (long size = 1024; size <= 128 * 1024; size += 16 * 1024) {
+        auto currTime = traverseCache(size, 64);
+        auto currDiff = std::abs(currTime - prevTime);
+        //std::cout << size/1024 << ' ' << currTime << ' '  << currDiff << ' ' <<  '\n';
+        if (!l1Probes.empty()) {
+            auto prevDiff = l1Probes.back().first;
+            auto relDiff = currDiff / prevDiff;
+            if (relDiff > maxDiff) {
+                maxDiff = prevDiff;
+                maxDiffSize = size / 1024;
+            }
+        }
+
+        l1Probes.emplace_back(currDiff, size/1024);
+        prevTime = currTime;
+    }
+
+    std::cout << maxDiffSize << '\n';
+    ans.push_back(maxDiffSize - 1);
 }
 
 std::vector<long> determineCacheSizes() {
@@ -124,25 +154,37 @@ std::vector<long> determineCacheSizes() {
     std::vector<long> tmp;
 
     long minTime = 1;
-    long maxDiff = 1;
-    long lastSpotted = 1024;
+    auto step = 256 * 1024;
+    // consider step for cache change like 256kb since first occurrence
+    long maxDiff = 0;
+    long prevTime = 1;
 
-    for (long size = 1024; size <= 9 * MB; size += 256*1024 - 1) {
+    determineL1Size(tmp);
+    return tmp;
+
+
+    for (long size = 1024; size <= 10 * MB; size += step - 1) {
         auto currTime = traverseCache(size, 64);
         auto currDiff = abs(currTime - minTime);
-
-/*        // means we are enough away from last
-        if (size * 256 > lastSpotted) {
-            maxDiff = 1;
-        }*/
+        if (size >= 256 * 1024) {
+            step = 256 * 1024;
+        }
 
         if (size == 1024) {
             minTime = currTime;
-        } else if (currTime < minTime && currDiff > maxDiff) {
+            currDiff = 1;
+        } else if (currTime < minTime) {
+            if (tmp.size()) {
+                int back = tmp[tmp.size() - 1];
+                //std::cout << "Diff is: " << size/1024 - back << '\n';
+                if (size/1024 - back <= 512) {
+                    std::cout << size / 1024 << ' ' << currTime << ' ' <<  currDiff <<'\n';
+                    continue;
+                }
+            }
             tmp.push_back(size / 1024);
             //lastSpotted = size;
             minTime = currTime;
-            maxDiff = currDiff;
         }
         std::cout << size / 1024 << ' ' << currTime << ' ' <<  currDiff <<'\n';
     }
