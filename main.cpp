@@ -15,6 +15,7 @@ long Z = 128 * 1024, N = 50, M = 100;
 //int *data[100000000];
 int *data[MB * 2];
 
+const int L1SizeBound = 512;
 const int REPS = 512 * MB;
 const int length = MB/sizeof(int) - 1;
 
@@ -90,19 +91,43 @@ bool sortFirst(const std::tuple<int, int>& lhs,const std::tuple<int, int>& rhs) 
     return (std::get<1>(lhs) < std::get<1>(rhs));
 }
 
+size_t* prepareArray(long size, size_t cacheLineSize) {
+    auto* buf = new size_t[size]{0};
 
-long traverseCache(long size, int cacheLineSize) {
+    size_t chainedInd = 0;
+    size_t i = 1;
+    while (i++ < size) {
+        buf[chainedInd] = size;
+        size_t nextStop = (cacheLineSize * rand()) % size;
+        while (buf[nextStop] > 0) {
+            nextStop = (1 + nextStop) % size;
+        }
+        buf[chainedInd] = nextStop;
+        chainedInd = nextStop;
+    }
+    return buf;
+}
+
+long traverseL1Cache(long size, size_t cacheLineSize) {
     char* buf = new char[size];
-
     auto startTime = std::chrono::high_resolution_clock::now();
-    //auto startTime = clock();
-
-    // replace with cache-line size
     for (size_t i = 0; i < 64 * MB; i++){
         ++buf[(i * cacheLineSize) % size]; // means we write to a new cache-line (I hope so)
     }
+    auto endTime = std::chrono::high_resolution_clock::now();
+    delete [] buf;
 
-    //auto endTime = clock();
+    return (endTime - startTime).count();
+}
+
+long traverseCache(long size, size_t cacheLineSize) {
+    auto* buf = prepareArray(size, cacheLineSize);
+    size_t v = 0;
+    auto startTime = std::chrono::high_resolution_clock::now();
+
+    for (size_t i = 0; i < 64 * MB; i++) {
+        v = buf[v];
+    }
     auto endTime = std::chrono::high_resolution_clock::now();
     delete [] buf;
 
@@ -117,8 +142,8 @@ void determineL1Size(std::vector<long>& ans) {
     std::vector<std::pair<long, long>> l1Probes;
     long maxDiffSize = 1024;
     // run separate loop for L1
-    for (long size = 1024; size <= 128 * 1024; size += 16 * 1024) {
-        auto currTime = traverseCache(size, 64);
+    for (long size = 1024; size <= L1SizeBound * 1024; size += 16 * 1024) {
+        auto currTime = traverseL1Cache(size, 64);
         auto currDiff = std::abs(currTime - prevTime);
         //std::cout << size/1024 << ' ' << currTime << ' '  << currDiff << ' ' <<  '\n';
         if (!l1Probes.empty()) {
@@ -145,7 +170,7 @@ std::vector<long> determineCacheSizes() {
     std::vector<long> tmp;
 
     long minTime = 1;
-    auto step = 256 * 1024;
+    auto step = 1024 * 1024;
     // consider step for cache change like 256kb since first occurrence
     long maxDiff = 0;
     long prevTime = 1;
@@ -154,14 +179,15 @@ std::vector<long> determineCacheSizes() {
     //return tmp;
     long startSize = 512 * 1024;
     // L2 and L3; 4096 for L2
-    std::vector<long> cacheBound{static_cast<long>(pow(2, 12)), 9200};
+    //std::vector<long> cacheBound{static_cast<long>(pow(2, 12)), 9200};
+    std::vector<long> cacheBound{static_cast<long>(pow(2, 12)), static_cast<long>(pow(2, 20))};
     std::vector<std::pair<long, long>> probes;
     long cacheS = 1;
 
     for (const auto &item : cacheBound) {
         std::cout << "Seek from " <<startSize/1024 << " to " << item * 1024 << '\n';
         probes.clear();
-        for (long size = startSize; size <= item * 1024 - 1; size += step) {
+        for (long size = startSize; size <= item * 1024 - 1; size *= 2) {
             auto currTime = traverseCache(size, 64);
             auto currDiff = std::abs(currTime - prevTime);
             if (size == startSize) {
