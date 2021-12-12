@@ -174,7 +174,7 @@ std::vector<long> determineCacheSizes() {
     long minTime = 1;
     auto step = 1024 * 1024;
     // consider step for cache change like 256kb since first occurrence
-    long maxDiff = 0;
+    long maxDiff = 1;
     long prevTime = 1;
 
     determineL1Size(tmp);
@@ -185,7 +185,9 @@ std::vector<long> determineCacheSizes() {
     std::vector<long> cacheBound{static_cast<long>(pow(2, 12)), static_cast<long>(pow(2, 16))};
     std::vector<std::pair<long, long>> probes;
     long cacheS = 1;
-    bool foundL3Cache = false;
+    bool foundCache = false;
+    float criticalBorderForCaches[] = {3, 2.2};
+    size_t cacheLvl = 0;
 
     for (const auto &item : cacheBound) {
         std::cout << "Seek from " << startSize/1024 << " to " << item << '\n';
@@ -196,25 +198,32 @@ std::vector<long> determineCacheSizes() {
             if (size == startSize) {
                 prevTime = currTime;
                 probes.emplace_back(currDiff, size/1024);
+                maxDiff = currDiff;
                 continue;
             }
             if (!probes.empty()) {
-                if (currDiff > maxDiff) {
-                //if ((currDiff + 0.1) / maxDiff > 1.6) {
+                //if (currDiff > maxDiff) {
+                if (maxDiff == 1) {
+                    maxDiff = currDiff;
+                } else if ((currDiff + 0.1) / maxDiff > criticalBorderForCaches[cacheLvl] && !foundCache) { // experienced even 7 here at cache border
+                    maxDiff = currDiff;
+                    cacheS = size / 1024;
+                    foundCache = true;
+
                     // means we're at L3 and might seen maximum already
-                    if (tmp.size() == 2 && cacheS != 1) {
-                        auto diff = (currDiff + 0.1) / maxDiff;
-                        if (diff > 2.1 && !foundL3Cache) {
-                            // update
-                            std::cout << diff << ' ' << cacheS << ' ' << size / 1024 << '\n';
-                            maxDiff = currDiff;
-                            cacheS = size / 1024;
-                            foundL3Cache = true;
-                        }
-                    } else {
-                        maxDiff = currDiff;
-                        cacheS = size / 1024;
-                    }
+                    //if (tmp.size() == 2 && cacheS != 1) {
+                    //    auto diff = (currDiff + 0.1) / maxDiff;
+                    //    if (diff > 2.1 && !foundL3Cache) {
+                    //        // update
+                    //        std::cout << diff << ' ' << cacheS << ' ' << size / 1024 << '\n';
+                    //        maxDiff = currDiff;
+                    //        cacheS = size / 1024;
+                    //        foundL3Cache = true;
+                    //    }
+                    //} else {
+                    //    maxDiff = currDiff;
+                    //    cacheS = size / 1024;
+                    //}
                 }
             }
             probes.emplace_back(currDiff, size/1024);
@@ -225,6 +234,8 @@ std::vector<long> determineCacheSizes() {
         std::cout << "Potential cache is " << cacheS << '\n';
         tmp.push_back(cacheS);
         maxDiff = cacheS = 1;
+        foundCache = false;
+        cacheLvl++;
     }
 
 
