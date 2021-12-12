@@ -125,7 +125,8 @@ long traverseCache(long size, size_t cacheLineSize) {
     size_t v = 0;
     auto startTime = std::chrono::high_resolution_clock::now();
 
-    for (size_t i = 0; i < 64 * MB; i++) {
+    // repeat 10 times
+    for (size_t i = 0; i < 10 * size; i++) {
         v = buf[v];
     }
     auto endTime = std::chrono::high_resolution_clock::now();
@@ -137,7 +138,7 @@ long traverseCache(long size, size_t cacheLineSize) {
 
 // looks ok
 void determineL1Size(std::vector<long>& ans) {
-    long maxDiff = 0;
+    long maxDiff = 1;
     long prevTime = 1;
     std::vector<std::pair<long, long>> l1Probes;
     long maxDiffSize = 1024;
@@ -149,8 +150,9 @@ void determineL1Size(std::vector<long>& ans) {
         if (!l1Probes.empty()) {
             auto prevDiff = l1Probes.back().first;
             auto relDiff = currDiff / prevDiff;
+            //std::cout << size/1024 << ' ' << currDiff << ' '  << relDiff << ' ' << maxDiff << '\n';
             if (relDiff > maxDiff) {
-                maxDiff = prevDiff;
+                maxDiff = currDiff;
                 maxDiffSize = size / 1024;
             }
         }
@@ -159,7 +161,7 @@ void determineL1Size(std::vector<long>& ans) {
         prevTime = currTime;
     }
 
-    std::cout << maxDiffSize << '\n';
+    std::cout << "L1 size: " <<  maxDiffSize << '\n';
     ans.push_back(maxDiffSize - 1);
 }
 
@@ -180,12 +182,12 @@ std::vector<long> determineCacheSizes() {
     long startSize = 512 * 1024;
     // L2 and L3; 4096 for L2
     //std::vector<long> cacheBound{static_cast<long>(pow(2, 12)), 9200};
-    std::vector<long> cacheBound{static_cast<long>(pow(2, 12)), static_cast<long>(pow(2, 20))};
+    std::vector<long> cacheBound{static_cast<long>(pow(2, 12)), static_cast<long>(pow(2, 16))};
     std::vector<std::pair<long, long>> probes;
     long cacheS = 1;
 
     for (const auto &item : cacheBound) {
-        std::cout << "Seek from " <<startSize/1024 << " to " << item * 1024 << '\n';
+        std::cout << "Seek from " << startSize/1024 << " to " << item << '\n';
         probes.clear();
         for (long size = startSize; size <= item * 1024 - 1; size *= 2) {
             auto currTime = traverseCache(size, 64);
