@@ -143,8 +143,9 @@ void determineL1Size(std::vector<long>& ans) {
     std::vector<std::pair<long, long>> l1Probes;
     long maxDiffSize = 1024;
     // run separate loop for L1
-    for (long size = 16 * 1024; size <= L1SizeBound * 1024; size += 16 * 1024) {
-        auto currTime = traverseL1Cache(size, 64);
+    //for (long size = 16 * 1024; size <= L1SizeBound * 1024; size += 16 * 1024) {
+    for (long size = 8 * 1024; size <= L1SizeBound * 1024; size *= 2) {
+        auto currTime = traverseCache(size, 64);
         auto currDiff = std::abs(currTime - prevTime);
         //std::cout << size/1024 << ' ' << currTime << ' '  << currDiff << ' ' <<  '\n';
         if (!l1Probes.empty()) {
@@ -192,7 +193,7 @@ std::vector<long> determineCacheSizes() {
     for (const auto &item : cacheBound) {
         std::cout << "Seek from " << startSize/1024 << " to " << item << '\n';
         probes.clear();
-        for (long size = startSize; size <= item * 1024 - 1; size *= 2) {
+        for (long size = startSize; size <= item * 1024 + 1; size *= 2) {
             auto currTime = traverseCache(size, 64) / 10; // should divide by 10?
             auto currDiff = std::abs(currTime - prevTime);
             if (size == startSize) {
