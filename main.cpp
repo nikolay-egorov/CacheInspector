@@ -50,12 +50,13 @@ long Time() {
     auto startTime = std::chrono::high_resolution_clock::now();
     runLoop(1000000);
     auto endTime = std::chrono::high_resolution_clock::now();
+    //std::cout << "inside Time : " << (endTime - startTime).count() << '\n';
     return (endTime - startTime).count();
 }
 
 // The DeltaDiff() subroutine returns true if there is a jump(or a difference in timing measurements) between the current time and previous time
 bool DeltaDiff() {
-//    const long diff = 1000000;
+    //    const long diff = 1000000;
     const long diff = 1e6;
     return (cur_time - prev_time) < diff;
 }
@@ -65,7 +66,7 @@ std::set<long> jumps;
 
 // The RecordJump() subroutine records the position of the jump in stride and spots
 void RecordJump() {
-//    jumps.insert(S - 1);
+    //    jumps.insert(S - 1);
     jumps.insert(H);
 }
 
@@ -78,7 +79,7 @@ bool isMovement() {
 //The DetectEntity subroutine starts decreasing the stride from specified value of H and records the stride at which there is movement in jumps for each entity. This gives each entity and its stride of entity.
 void DetectEntity(long H) {
     while (H > 0) {
-//        std::cout << movements[H] << ' ';
+        //        std::cout << movements[H] << ' ';
         // if (movementInJumps) { std::cout << ""; }
         H /= 2;
     }
@@ -86,10 +87,11 @@ void DetectEntity(long H) {
 
 
 bool sortFirst(const std::tuple<int, int>& lhs,const std::tuple<int, int>& rhs) {
-//    return (std::get<0>(lhs) < std::get<0>(rhs) && std::get<1>(lhs) < std::get<1>(rhs));
-//    return (std::get<1>(lhs) < std::get<1>(rhs) && std::get<0>(lhs) < std::get<0>(rhs));
+    //    return (std::get<0>(lhs) < std::get<0>(rhs) && std::get<1>(lhs) < std::get<1>(rhs));
+    //    return (std::get<1>(lhs) < std::get<1>(rhs) && std::get<0>(lhs) < std::get<0>(rhs));
     return (std::get<1>(lhs) < std::get<1>(rhs));
 }
+
 
 size_t* prepareArray(long size, size_t cacheLineSize) {
     auto* buf = new size_t[size]{0};
@@ -123,38 +125,45 @@ long traverseL1Cache(long size, size_t cacheLineSize) {
 long traverseCache(long size, size_t cacheLineSize) {
     auto* buf = prepareArray(size, cacheLineSize);
     size_t v = 0;
-    auto startTime = std::chrono::high_resolution_clock::now();
+    //auto startTime = std::chrono::high_resolution_clock::now();
+    auto startTime = std::chrono::steady_clock::now();
 
-    // repeat 10 times
+    // repeat 10 times (maybe do rand before again?)
     for (size_t i = 0; i < 10 * size; i++) {
-        v = buf[v];
+        v = buf[(rand() + v) % size];
     }
-    auto endTime = std::chrono::high_resolution_clock::now();
+    auto endTime = std::chrono::steady_clock::now();
+
     delete [] buf;
 
     return (endTime - startTime).count();
-    //return (endTime - startTime);
 }
 
 // looks ok
 void determineL1Size(std::vector<long>& ans) {
-    long maxDiff = 1;
+    auto maxDiff = 1.0;
     long prevTime = 1;
     std::vector<std::pair<long, long>> l1Probes;
     long maxDiffSize = 1024;
+    bool hasFound = false;
     // run separate loop for L1
     //for (long size = 16 * 1024; size <= L1SizeBound * 1024; size += 16 * 1024) {
     for (long size = 8 * 1024; size <= L1SizeBound * 1024; size *= 2) {
         auto currTime = traverseCache(size, 64);
-        auto currDiff = std::abs(currTime - prevTime);
-        //std::cout << size/1024 << ' ' << currTime << ' '  << currDiff << ' ' <<  '\n';
+        //auto currDiff = std::abs(currTime - prevTime);
+        auto currDiff = std::abs((currTime + 0.1) / prevTime);
+        std::cout << size/1024 << ' ' << currTime << ' '  << currDiff << ' ' <<  '\n';
         if (!l1Probes.empty()) {
             auto prevDiff = l1Probes.back().first;
             auto relDiff = currDiff / prevDiff;
             //std::cout << size/1024 << ' ' << currDiff << ' '  << relDiff << ' ' << maxDiff << '\n';
-            if (relDiff > maxDiff) {
+            if (currDiff > maxDiff && !hasFound) {
+                //if (relDiff > 1.9 && !hasFound) {
                 maxDiff = currDiff;
                 maxDiffSize = size / 1024;
+                if (maxDiff > 2.3) {
+                    hasFound = true;
+                }
             }
         }
 
@@ -194,6 +203,7 @@ std::vector<long> determineCacheSizes() {
         std::cout << "Seek from " << startSize/1024 << " to " << item << '\n';
         probes.clear();
         for (long size = startSize; size <= item * 1024 + 1; size *= 2) {
+            if (foundCache) break;
             auto currTime = traverseCache(size, 64) / 10; // should divide by 10?
             auto currDiff = std::abs(currTime - prevTime);
             if (size == startSize) {
@@ -210,21 +220,6 @@ std::vector<long> determineCacheSizes() {
                     maxDiff = currDiff;
                     cacheS = size / 1024;
                     foundCache = true;
-
-                    // means we're at L3 and might seen maximum already
-                    //if (tmp.size() == 2 && cacheS != 1) {
-                    //    auto diff = (currDiff + 0.1) / maxDiff;
-                    //    if (diff > 2.1 && !foundL3Cache) {
-                    //        // update
-                    //        std::cout << diff << ' ' << cacheS << ' ' << size / 1024 << '\n';
-                    //        maxDiff = currDiff;
-                    //        cacheS = size / 1024;
-                    //        foundL3Cache = true;
-                    //    }
-                    //} else {
-                    //    maxDiff = currDiff;
-                    //    cacheS = size / 1024;
-                    //}
                 }
             }
             probes.emplace_back(currDiff, size/1024);
@@ -266,6 +261,7 @@ int main() {
         S = 2;
         while (S < N) {
             cur_time = Time();
+            //std::cout << "cur_time: " << cur_time << '\n';
             if (DeltaDiff()) {
                 jmpC++;
                 // need to do something with S
